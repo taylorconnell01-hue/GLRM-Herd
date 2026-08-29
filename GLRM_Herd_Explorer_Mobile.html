@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Herd Lineage & Descendant Explorer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: #f0f2f5; padding: 12px; display: flex; flex-direction: column; align-items: center; }
+
+  .header { text-align: center; margin-bottom: 12px; }
+  .header h2 { font-size: 1.4rem; }
+  .status { font-size: 0.85rem; color: #666; margin-top: 4px; font-weight: 600; }
+
+  .controls {
+    background: #fff; padding: 12px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; width: 100%; max-width: 950px;
+    align-items: center; justify-content: center; position: relative;
+  }
+  
+  .search-wrapper { position: relative; flex: 1 1 100%; min-width: 200px; }
+  @media (min-width: 600px) {
+    .search-wrapper { flex: 2; }
+  }
+
+  input[type="text"] { 
+    width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; 
+    -webkit-appearance: none;
+  }
+  
+  .suggestions-dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: #ffffff; border: 1px solid #d0d7de; border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15); max-height: 250px; overflow-y: auto;
+    z-index: 1000; display: none;
+  }
+  .suggestion-item {
+    padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f2f5;
+    display: flex; justify-content: space-between; align-items: center; transition: background 0.1s;
+  }
+  .suggestion-item:last-child { border-bottom: none; }
+  .suggestion-item:hover, .suggestion-item.active { background: #e8f3ff; }
+  .suggestion-title { font-weight: 700; color: #0066cc; font-size: 0.85rem; }
+  .suggestion-meta { font-size: 0.75rem; color: #57606a; }
+
+  .select-group { display: flex; align-items: center; gap: 6px; width: 100%; }
+  @media (min-width: 600px) {
+    .select-group { width: auto; }
+  }
+
+  select { 
+    padding: 11px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95rem; 
+    flex: 1; background: #fff;
+  }
+  
+  .btn-group { display: flex; gap: 6px; width: 100%; }
+  @media (min-width: 600px) {
+    .btn-group { width: auto; }
+  }
+
+  button {
+    padding: 12px 14px; border: none; border-radius: 6px; font-weight: bold; 
+    cursor: pointer; font-size: 0.9rem; flex: 1; min-height: 44px;
+    touch-action: manipulation;
+  }
+  
+  .btn-primary { background: #0066cc; color: #fff; }
+  .btn-secondary { background: #2ea44f; color: #fff; }
+  .btn-tertiary { background: #6f42c1; color: #fff; }
+
+  /* Tree View & Zoom Controls */
+  .tree-wrapper {
+    width: 100%; max-width: 98vw; background: #fff;
+    padding: 12px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    display: none; margin-bottom: 20px; position: relative;
+  }
+  
+  .zoom-toolbar {
+    display: flex; justify-content: flex-end; align-items: center; gap: 6px;
+    padding-bottom: 8px; border-bottom: 1px solid #e1e4e8; margin-bottom: 10px;
+  }
+  .zoom-btn {
+    padding: 6px 10px; background: #e1e4e8; border: 1px solid #c0c6cc; border-radius: 4px;
+    font-size: 0.8rem; font-weight: 700; cursor: pointer; color: #24292f; flex: none; min-height: auto;
+  }
+  .zoom-label { font-size: 0.75rem; color: #57606a; font-weight: 600; margin-right: 2px; }
+
+  .tree-scroll-container { width: 100%; overflow: auto; max-height: 80vh; padding-bottom: 10px; -webkit-overflow-scrolling: touch; }
+  .tree { display: flex; gap: 8px; min-width: max-content; transform-origin: top left; transition: transform 0.15s ease-out; }
+
+  /* Standard Card Mode */
+  .gen-col { display: flex; flex-direction: column; justify-content: space-around; gap: 8px; width: 240px; flex-shrink: 0; }
+  .gen-title { text-align: center; font-size: 0.75rem; font-weight: 700; color: #57606a; text-transform: uppercase; margin-bottom: 4px; }
+
+  .card {
+    border: 1px solid #d0d7de; padding: 6px 8px; border-radius: 6px; background: #f8f9fa;
+    display: flex; align-items: flex-start; gap: 8px; cursor: pointer; transition: all 0.12s ease-in-out;
+    user-select: none; position: relative;
+  }
+  .card:hover { border-color: #0066cc; background: #f0f7ff; }
+  .card.active-subject { border: 2px solid #0066cc; background: #e8f3ff; }
+  .card.static-card { cursor: default; }
+  .card.unknown-card { opacity: 0.5; cursor: default; border-style: dashed; }
+
+  /* Thumbnail */
+  .img-container { position: relative; flex-shrink: 0; }
+  .card img.thumb-img {
+    width: 44px; height: 44px; border-radius: 4px; object-fit: cover;
+    background: #e1e4e8; border: 1px solid #c0c6cc; display: block;
+  }
+
+  #globalPhotoPreview {
+    display: none; position: fixed; width: 220px; height: 220px; border-radius: 10px;
+    object-fit: cover; background: #fff; border: 3px solid #0066cc;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.35); z-index: 999999; pointer-events: none;
+    transform: translate(10px, -50%);
+  }
+
+  .details { line-height: 1.25; overflow: hidden; width: 100%; }
+  .role { font-size: 0.6rem; font-weight: 700; color: #57606a; text-transform: uppercase; }
+  .name { font-size: 0.8rem; font-weight: 700; color: #0066cc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { font-size: 0.7rem; color: #24292f; margin-top: 1px; }
+  .tag-badge { display: inline-block; background: #e1e4e8; border-radius: 3px; padding: 1px 4px; font-size: 0.62rem; font-weight: 600; margin-top: 2px; }
+  .breed-badge { background: #e8f4fd; color: #0969da; border: 1px solid #c8e1fb; }
+
+  /* Compact Density Mode */
+  .tree.compact-density .gen-col { width: 130px; gap: 3px; }
+  .tree.compact-density .gen-title { font-size: 0.65rem; margin-bottom: 2px; }
+  .tree.compact-density .card { padding: 3px 4px; gap: 4px; border-radius: 4px; }
+  .tree.compact-density .card img.thumb-img { width: 22px; height: 22px; border-radius: 2px; }
+  .tree.compact-density .role { font-size: 0.52rem; }
+  .tree.compact-density .name { font-size: 0.68rem; }
+  .tree.compact-density .meta { font-size: 0.6rem; }
+  .tree.compact-density .dob-info { display: none; }
+
+  /* Ultra Density Mode */
+  .tree.ultra-density .gen-col { width: 110px; gap: 2px; }
+  .tree.ultra-density .card { padding: 2px 3px; gap: 3px; }
+  .tree.ultra-density .img-container { display: none; }
+  .tree.ultra-density .name { font-size: 0.62rem; }
+
+  /* Descendants View */
+  .offspring-wrapper {
+    width: 100%; max-width: 1050px; background: #fff; padding: 16px;
+    border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); display: none; margin-bottom: 20px;
+  }
+  .descendant-header { border-bottom: 2px solid #e1e4e8; padding-bottom: 8px; margin-bottom: 12px; }
+  .gen-section { margin-bottom: 20px; }
+  .gen-header-title { font-size: 0.9rem; font-weight: 700; color: #24292f; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .count-pill { background: #0969da; color: #fff; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
+  .offspring-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .lineage-info { font-size: 0.7rem; color: #333; margin-top: 3px; background: #eef2f6; padding: 3px 6px; border-radius: 4px; }
+
+  /* Forward Family Tree Text View */
+  .family-text-wrapper {
+    width: 100%; max-width: 900px; background: #fff; padding: 14px;
+    border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); display: none; margin-bottom: 20px;
+  }
+  .family-meta { font-family: monospace; font-size: 0.82rem; line-height: 1.4; color: #111; margin-bottom: 12px; word-break: break-word; }
+  .family-tree-text {
+    font-family: "Courier New", Courier, monospace; font-size: 0.8rem; line-height: 1.3;
+    white-space: pre; background: #fafafa; padding: 12px; border: 1px solid #e1e4e8; border-radius: 6px;
+    overflow-x: auto; color: #24292f; -webkit-overflow-scrolling: touch;
+  }
+</style>
+</head>
+<body>
+
+  <img id="globalPhotoPreview" alt="Enlarged Animal Photo" />
+
+  <div class="header">
+    <h2>Herd Lineage & Descendant Explorer</h2>
+    <div class="status" id="dbStatus">Connecting to database...</div>
+  </div>
+
+  <div class="controls">
+    <div class="search-wrapper">
+      <input type="text" id="cowInput" placeholder="Birth ID, Name, Cow #, Sire..." autocomplete="off">
+      <div class="suggestions-dropdown" id="suggestionsDropdown"></div>
+    </div>
+    
+    <div class="select-group">
+      <label for="genSelect" style="font-size:0.85rem; font-weight:600; color:#555; white-space:nowrap;">Gens:</label>
+      <select id="genSelect">
+        <option value="2">2 Gens</option>
+        <option value="3" selected>3 Gens</option>
+        <option value="4">4 Gens</option>
+        <option value="5">5 Gens</option>
+        <option value="6">6 Gens</option>
+        <option value="7">7 Gens</option>
+        <option value="8">8 Gens</option>
+        <option value="9">9 Gens</option>
+        <option value="10">10 Gens</option>
+      </select>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn-primary" onclick="lookupAndBuild()">Pedigree</button>
+      <button class="btn-secondary" onclick="lookupDescendants()">Offspring</button>
+      <button class="btn-tertiary" onclick="viewBasicFamily()">View Family</button>
+    </div>
+  </div>
+
+  <!-- Pedigree View -->
+  <div class="tree-wrapper" id="treeWrapper">
+    <div class="zoom-toolbar">
+      <span class="zoom-label">Scale:</span>
+      <button class="zoom-btn" onclick="adjustZoom(-0.1)">− Out</button>
+      <span id="zoomLevelDisplay" style="font-size:0.75rem; font-weight:700; width:35px; text-align:center;">100%</span>
+      <button class="zoom-btn" onclick="adjustZoom(0.1)">+ In</button>
+      <button class="zoom-btn" onclick="resetZoom()">Reset</button>
+    </div>
+    <div class="tree-scroll-container">
+      <div class="tree" id="pedigreeTree"></div>
+    </div>
+  </div>
+
+  <!-- Forward Text Family View -->
+  <div class="family-text-wrapper" id="familyTextWrapper">
+    <div class="family-meta" id="familyMeta"></div>
+    <div class="family-tree-text" id="familyTreeText"></div>
+  </div>
+
+  <!-- Multi-Generation Descendants View -->
+  <div class="offspring-wrapper" id="offspringWrapper">
+    <div class="descendant-header">
+      <h3 id="offspringMainTitle" style="color:#0969da; font-size: 1.1rem;">Descendant Lineage</h3>
+      <div id="offspringSubtitle" style="font-size:0.8rem; color:#666; margin-top:2px;"></div>
+    </div>
+
+    <div class="gen-section">
+      <div class="gen-header-title">Direct Offspring <span class="count-pill" id="gen1Count">0</span></div>
+      <div class="offspring-grid" id="gen1Grid"></div>
+    </div>
+
+    <div class="gen-section">
+      <div class="gen-header-title">Grandchildren (Gen 2) <span class="count-pill" id="gen2Count">0</span></div>
+      <div class="offspring-grid" id="gen2Grid"></div>
+    </div>
+
+    <div class="gen-section">
+      <div class="gen-header-title">Great-Grandchildren (Gen 3) <span class="count-pill" id="gen3Count">0</span></div>
+      <div class="offspring-grid" id="gen3Grid"></div>
+    </div>
+  </div>
+
+<script>
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxHDuK9BvYibbYovjxu67vOuJxZeSsjHMVJM0fRQEL_BtF-5ICk10NbhAuhEynYhwCt/exec";
+const PLACEHOLDER_SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' width='64' height='64'><rect width='64' height='64' fill='%23e1e4e8'/><path d='M32 20c-5.5 0-10 4.5-10 10 0 4.2 2.6 7.8 6.3 9.3C23.1 40.8 19 45.4 19 51h26c0-5.6-4.1-10.2-9.3-11.7 3.7-1.5 6.3-5.1 6.3-9.3 0-5.5-4.5-10-10-10z' fill='%23a0a6ad'/></svg>";
+
+const herdDB = {};
+const lookupIndex = {};
+let selectedBirthId = null;
+let currentZoom = 1.0;
+
+function formatImageUrl(url) {
+  if (!url || typeof url !== 'string' || !url.trim()) return '';
+  const raw = url.trim();
+
+  const matchD = raw.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (matchD && matchD[1]) return `https://lh3.googleusercontent.com/d/${matchD[1]}`;
+
+  const matchId = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (matchId && matchId[1]) return `https://lh3.googleusercontent.com/d/${matchId[1]}`;
+
+  return raw;
+}
+
+function formatDate(val) {
+  if (!val) return '';
+  if (typeof val === 'string' && val.startsWith('Date(')) {
+    const parts = val.match(/\d+/g);
+    if (parts) {
+      const d = new Date(parts[0], parts[1], parts[2]);
+      return d.toLocaleDateString();
+    }
+  }
+  return val.toString().trim();
+}
+
+async function loadHerdData() {
+  const statusEl = document.getElementById("dbStatus");
+  statusEl.textContent = "Connecting to herd database...";
+  statusEl.style.color = "#666";
+
+  try {
+    const response = await fetch(APPS_SCRIPT_URL);
+    if (!response.ok) throw new Error("Network error fetching sheet data");
+
+    const rows = await response.json();
+
+    rows.forEach(row => {
+      const birthId  = row[0]?.toString().trim().toUpperCase() || '';
+      if (!birthId) return;
+
+      const cowNum   = row[1]?.toString().trim() || '';
+      const name     = row[2]?.toString().trim() || '';
+      const dob      = formatDate(row[3]);
+      const sex      = row[4]?.toString().trim().toUpperCase() || '';
+      const damId    = row[5]?.toString().trim().toUpperCase() || '';
+      const sireCode = row[6]?.toString().trim().toUpperCase() || '';
+      const sireName = row[7]?.toString().trim() || '';
+      const rawPhoto = row[8]?.toString().trim() || '';
+      const breed    = row[9]?.toString().trim() || '';
+
+      const photoUrl = formatImageUrl(rawPhoto);
+
+      const record = { 
+        birthId, cowNum, name, dob, sex, damId, sireCode, sireName, 
+        photo: photoUrl || PLACEHOLDER_SVG, 
+        hasRealPhoto: Boolean(photoUrl), breed, hasFullRecord: true 
+      };
+
+      herdDB[birthId] = record;
+      if (cowNum) lookupIndex[cowNum.toUpperCase()] = birthId;
+      if (name) lookupIndex[name.toUpperCase()] = birthId;
+    });
+
+    const count = Object.keys(herdDB).length;
+    statusEl.textContent = `Ready (${count} records loaded)`;
+    statusEl.style.color = "#2ea44f";
+
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Failed to load herd data. Please try again.";
+    statusEl.style.color = "#d9381e";
+  }
+}
+
+function searchHerd(query) {
+  if (!query) return [];
+  const q = query.trim().toUpperCase();
+  const results = [];
+
+  for (const key in herdDB) {
+    const item = herdDB[key];
+    if (!item.hasFullRecord) continue;
+
+    let score = 0;
+    if (item.birthId.toUpperCase() === q) score += 100;
+    else if (item.birthId.toUpperCase().includes(q)) score += 50;
+
+    if (item.cowNum.toUpperCase() === q) score += 90;
+    else if (item.cowNum.toUpperCase().includes(q)) score += 40;
+
+    if (item.name.toUpperCase().includes(q)) score += 60;
+    if (item.sireCode.toUpperCase().includes(q)) score += 30;
+    if (item.sireName.toUpperCase().includes(q)) score += 30;
+
+    if (score > 0) {
+      results.push({ item, score });
+    }
+  }
+
+  return results.sort((a, b) => b.score - a.score).map(r => r.item);
+}
+
+const searchInput = document.getElementById('cowInput');
+const dropdown = document.getElementById('suggestionsDropdown');
+
+searchInput.addEventListener('input', (e) => {
+  const query = e.target.value.trim();
+  selectedBirthId = null;
+
+  if (!query) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  const results = searchHerd(query).slice(0, 8);
+
+  if (results.length === 0) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  dropdown.innerHTML = results.map(item => {
+    const title = item.name || (item.cowNum ? `Cow #${item.cowNum}` : item.birthId);
+    const sub = [
+      item.cowNum ? `Cow #${item.cowNum}` : '',
+      `ID: ${item.birthId}`
+    ].filter(Boolean).join(' • ');
+
+    return `
+      <div class="suggestion-item" onclick="selectSuggestion('${item.birthId}')">
+        <div>
+          <div class="suggestion-title">${title}</div>
+          <div class="suggestion-meta">${sub}</div>
+        </div>
+        <span class="tag-badge" style="font-size:0.6rem;">${item.sex || 'ANIMAL'}</span>
+      </div>
+    `;
+  }).join('');
+
+  dropdown.style.display = 'block';
+});
+
+function selectSuggestion(birthId) {
+  const item = herdDB[birthId];
+  if (!item) return;
+
+  const displayName = item.name || (item.cowNum ? `Cow #${item.cowNum}` : item.birthId);
+  searchInput.value = displayName;
+  selectedBirthId = birthId;
+  dropdown.style.display = 'none';
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.search-wrapper')) {
+    dropdown.style.display = 'none';
+  }
+});
+
+function resolveId(query) {
+  if (selectedBirthId && herdDB[selectedBirthId]) return selectedBirthId;
+  if (!query) return null;
+  
+  const q = query.trim().toUpperCase();
+  if (herdDB[q]) return q;
+  if (lookupIndex[q]) return lookupIndex[q];
+
+  const searchResults = searchHerd(query);
+  if (searchResults.length > 0) return searchResults[0].birthId;
+  
+  return null;
+}
+
+function resolveSireId(codeOrName) {
+  if (!codeOrName) return null;
+  const q = codeOrName.trim().toUpperCase();
+
+  if (herdDB[q]) return q;
+  if (lookupIndex[q]) {
+    const candidate = herdDB[lookupIndex[q]];
+    if (candidate && (candidate.sex === 'M' || candidate.sex === 'BULL' || candidate.sex === 'MALE' || candidate.birthId === q)) {
+      return candidate.birthId;
+    }
+  }
+
+  const exactMale = Object.values(herdDB).find(a => 
+    (a.sex === 'M' || a.sex === 'BULL' || a.sex === 'MALE') &&
+    (a.birthId === q || (a.name && a.name.toUpperCase() === q) || (a.cowNum && a.cowNum.toUpperCase() === q))
+  );
+  if (exactMale) return exactMale.birthId;
+
+  return null;
+}
+
+function resolveDamId(idOrName) {
+  if (!idOrName) return null;
+  const q = idOrName.trim().toUpperCase();
+  if (herdDB[q]) return q;
+  if (lookupIndex[q]) return lookupIndex[q];
+  return null;
+}
+
+function getAncestors(id, fallbackName, fallbackCode, currentGen, maxGen, role = 'Subject') {
+  let resolvedBirthId = null;
+  if (role.includes('Sire')) {
+    resolvedBirthId = resolveSireId(id) || resolveSireId(fallbackCode) || resolveSireId(fallbackName);
+  } else if (role.includes('Dam')) {
+    resolvedBirthId = resolveDamId(id) || resolveDamId(fallbackCode) || resolveDamId(fallbackName);
+  } else {
+    resolvedBirthId = resolveId(id) || resolveId(fallbackCode) || resolveId(fallbackName);
+  }
+
+  const data = resolvedBirthId ? herdDB[resolvedBirthId] : null;
+  const node = { id, fallbackName, fallbackCode, role, currentGen, data };
+
+  if (currentGen < maxGen) {
+    if (data && data.hasFullRecord) {
+      const nextSireCode = data.sireCode || null;
+      const nextSireName = data.sireName || '';
+      const nextDamId    = data.damId || null;
+
+      node.sire = getAncestors(nextSireCode, nextSireName, nextSireCode, currentGen + 1, maxGen, 'Sire');
+      node.dam  = getAncestors(nextDamId, '', '', currentGen + 1, maxGen, 'Dam');
+    } else {
+      node.sire = getAncestors(null, '', '', currentGen + 1, maxGen, 'Sire');
+      node.dam  = getAncestors(null, '', '', currentGen + 1, maxGen, 'Dam');
+    }
+  }
+  return node;
+}
+
+function flattenTreeByGen(node, genMap = {}) {
+  if (!genMap[node.currentGen]) genMap[node.currentGen] = [];
+  genMap[node.currentGen].push(node);
+  if (node.sire) flattenTreeByGen(node.sire, genMap);
+  if (node.dam) flattenTreeByGen(node.dam, genMap);
+  return genMap;
+}
+
+function showGlobalPreview(e, url) {
+  const preview = document.getElementById('globalPhotoPreview');
+  preview.src = url;
+  
+  let x = e.clientX + 10;
+  let y = e.clientY;
+
+  if (x + 230 > window.innerWidth) x = e.clientX - 230;
+  if (y + 110 > window.innerHeight) {
+    y = window.innerHeight - 110;
+  } else if (y - 110 < 0) {
+    y = 110;
+  }
+
+  preview.style.left = `${x}px`;
+  preview.style.top = `${y}px`;
+  preview.style.display = 'block';
+}
+
+function moveGlobalPreview(e) {
+  const preview = document.getElementById('globalPhotoPreview');
+  if (preview.style.display === 'block') {
+    let x = e.clientX + 10;
+    let y = e.clientY;
+
+    if (x + 230 > window.innerWidth) x = e.clientX - 230;
+    if (y + 110 > window.innerHeight) {
+      y = window.innerHeight - 110;
+    } else if (y - 110 < 0) {
+      y = 110;
+    }
+
+    preview.style.left = `${x}px`;
+    preview.style.top = `${y}px`;
+  }
+}
+
+function hideGlobalPreview() {
+  const preview = document.getElementById('globalPhotoPreview');
+  preview.style.display = 'none';
+  preview.src = '';
+}
+
+function renderCard(node, isSubject = false, isOffspringView = false) {
+  const data = node.data;
+  const hasIdentifier = node.id || node.fallbackName || node.fallbackCode;
+
+  if (!hasIdentifier && !data) {
+    return `
+      <div class="card unknown-card">
+        <div class="details">
+          <div class="role">${node.role}</div>
+          <div class="name" style="color:#888;">Unrecorded</div>
+        </div>
+      </div>`;
+  }
+
+  const displayName = data?.name || node.fallbackName || (data?.cowNum ? `Cow #${data.cowNum}` : (node.id || node.fallbackCode || 'Unrecorded'));
+  const sireOfThisAnimal = (data && data.hasFullRecord) ? (data.sireName || data.sireCode || '') : '';
+  
+  const cowNumDisplay = data?.cowNum ? `Cow #${data.cowNum}` : '';
+  const birthIdDisplay = data?.birthId || (!data && node.id && node.id !== displayName ? node.id : '');
+  const photoUrl = data?.photo || PLACEHOLDER_SVG;
+  const hasRealPhoto = Boolean(data?.hasRealPhoto);
+  const breedDisplay = data?.breed || '';
+  const sexDisplay = data?.sex || (node.role.includes('Sire') || node.role.includes('Son') ? 'M' : (node.role.includes('Dam') || node.role.includes('Daughter') ? 'F' : ''));
+  const dobDisplay = data?.dob || '';
+
+  const resolvedTarget = data ? data.birthId : (node.role.includes('Sire') ? resolveSireId(node.id || node.fallbackCode || node.fallbackName) : resolveId(node.id || node.fallbackCode || node.fallbackName));
+  const isClickable = !!resolvedTarget;
+
+  const hoverHandlers = hasRealPhoto 
+    ? `onmouseenter="showGlobalPreview(event, '${photoUrl}')" onmousemove="moveGlobalPreview(event)" onmouseleave="hideGlobalPreview()"` 
+    : '';
+
+  return `
+    <div class="card ${isSubject ? 'active-subject' : ''} ${!isClickable ? 'static-card' : ''}" 
+         onclick="${isClickable ? `focusAnimal('${resolvedTarget}')` : ''}" 
+         title="${isClickable ? `Click to focus on ${displayName}` : displayName}">
+      
+      <div class="img-container ${hasRealPhoto ? 'has-photo' : ''}" ${hoverHandlers}>
+        <img class="thumb-img" src="${photoUrl}" alt="${displayName}" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='${PLACEHOLDER_SVG}'">
+      </div>
+
+      <div class="details">
+        <div class="role">${node.role}</div>
+        <div class="name">${displayName}</div>
+        <div class="meta">
+          ${cowNumDisplay ? `${cowNumDisplay} ` : ''}
+          ${birthIdDisplay && birthIdDisplay !== displayName ? `(${birthIdDisplay})` : ''}
+          ${dobDisplay ? `<span class="dob-info">• ${dobDisplay}</span>` : ''}
+          
+          ${isOffspringView && data ? `
+            <div class="lineage-info">
+              <div><strong>Sire:</strong> ${sireOfThisAnimal || 'Unrecorded'}</div>
+              <div><strong>Dam ID:</strong> ${data.damId || 'Unrecorded'}</div>
+            </div>
+          ` : ''}
+
+          <div>
+            ${breedDisplay ? `<span class="tag-badge breed-badge">${breedDisplay}</span> ` : ''}
+            ${sexDisplay ? `<span class="tag-badge">${sexDisplay}</span> ` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function buildTree(rootId) {
+  hideAllViews();
+  const maxGen = parseInt(document.getElementById('genSelect').value, 10);
+  const rootRecord = herdDB[rootId];
+  const treeRoot = getAncestors(rootId, rootRecord?.name || '', rootRecord?.sireCode || '', 1, maxGen, 'Focus Animal');
+  const genMap = flattenTreeByGen(treeRoot);
+
+  const container = document.getElementById('pedigreeTree');
+  container.innerHTML = '';
+  
+  container.classList.remove('compact-density', 'ultra-density');
+  if (maxGen >= 8) {
+    container.classList.add('ultra-density');
+    currentZoom = 0.85;
+  } else if (maxGen >= 5) {
+    container.classList.add('compact-density');
+    currentZoom = 0.95;
+  } else {
+    currentZoom = 1.0;
+  }
+  applyZoom();
+
+  for (let g = 1; g <= maxGen; g++) {
+    const nodes = genMap[g] || [];
+    const colDiv = document.createElement('div');
+    colDiv.className = 'gen-col';
+    
+    const genLabel = g === 1 ? 'Subject' : (g === 2 ? 'Parents' : (g === 3 ? 'Grandparents' : `Gen ${g}`));
+    colDiv.innerHTML = `<div class="gen-title">${genLabel}</div>`;
+
+    nodes.forEach(n => {
+      colDiv.innerHTML += renderCard(n, g === 1, false);
+    });
+    container.appendChild(colDiv);
+  }
+
+  document.getElementById('treeWrapper').style.display = 'block';
+}
+
+function adjustZoom(delta) {
+  currentZoom = Math.min(Math.max(0.4, currentZoom + delta), 1.6);
+  applyZoom();
+}
+
+function resetZoom() {
+  currentZoom = 1.0;
+  applyZoom();
+}
+
+function applyZoom() {
+  const tree = document.getElementById('pedigreeTree');
+  tree.style.transform = `scale(${currentZoom})`;
+  document.getElementById('zoomLevelDisplay').textContent = `${Math.round(currentZoom * 100)}%`;
+}
+
+function lookupAndBuild() {
+  const input = document.getElementById('cowInput').value;
+  const rootId = resolveId(input);
+  if (!rootId) {
+    alert(`No matching animal found for "${input}".`);
+    return;
+  }
+  dropdown.style.display = 'none';
+  buildTree(rootId);
+}
+
+function focusAnimal(id) {
+  const resolved = resolveId(id);
+  if (resolved) {
+    const item = herdDB[resolved];
+    searchInput.value = item?.name || (item?.cowNum ? `Cow #${item.cowNum}` : resolved);
+    selectedBirthId = resolved;
+    buildTree(resolved);
+  }
+}
+
+function findDirectChildren(parentRecords) {
+  const damBirthIds = new Set();
+  const sireIdentifiers = new Set();
+
+  parentRecords.forEach(p => {
+    const isMale = (p.sex === 'M' || p.sex === 'BULL' || p.sex === 'MALE');
+    if (isMale) {
+      if (p.birthId) sireIdentifiers.add(p.birthId.toUpperCase());
+      if (p.name) sireIdentifiers.add(p.name.toUpperCase());
+      if (p.cowNum) sireIdentifiers.add(p.cowNum.toUpperCase());
+    } else {
+      if (p.birthId) damBirthIds.add(p.birthId.toUpperCase());
+    }
+  });
+
+  return Object.values(herdDB).filter(cow => {
+    if (!cow.hasFullRecord) return false;
+    const matchesDam = cow.damId && damBirthIds.has(cow.damId.toUpperCase());
+    const matchesSireCode = cow.sireCode && sireIdentifiers.has(cow.sireCode.toUpperCase());
+    const matchesSireName = cow.sireName && sireIdentifiers.has(cow.sireName.toUpperCase());
+    return matchesDam || matchesSireCode || matchesSireName;
+  });
+}
+
+function lookupDescendants() {
+  const input = document.getElementById('cowInput').value;
+  const rootId = resolveId(input);
+  if (!rootId) {
+    alert(`No matching animal found for "${input}".`);
+    return;
+  }
+
+  hideAllViews();
+  dropdown.style.display = 'none';
+  const root = herdDB[rootId];
+  const titleName = root?.name || (root?.cowNum ? `Cow #${root.cowNum}` : rootId);
+
+  const gen1 = findDirectChildren([root]);
+  const gen2 = gen1.length > 0 ? findDirectChildren(gen1) : [];
+  const gen3 = gen2.length > 0 ? findDirectChildren(gen2) : [];
+
+  document.getElementById('offspringMainTitle').textContent = `Descendants of ${titleName}`;
+  document.getElementById('offspringSubtitle').textContent = `Tracking 3 generations of progeny`;
+
+  function renderSection(list, gridId, countId, roles) {
+    const grid = document.getElementById(gridId);
+    const countPill = document.getElementById(countId);
+    countPill.textContent = list.length;
+    grid.innerHTML = '';
+
+    if (list.length === 0) {
+      grid.innerHTML = '<p style="color:#888; font-size:0.85rem; padding: 4px 0;">No descendants recorded.</p>';
+    } else {
+      list.forEach(item => {
+        const role = item.sex === 'F' ? roles.female : (item.sex === 'M' ? roles.male : roles.neutral);
+        grid.innerHTML += renderCard({ role, data: item }, false, true);
+      });
+    }
+  }
+
+  renderSection(gen1, 'gen1Grid', 'gen1Count', { female: 'Daughter', male: 'Son', neutral: 'Offspring' });
+  renderSection(gen2, 'gen2Grid', 'gen2Count', { female: 'Granddaughter', male: 'Grandson', neutral: 'Grandchild' });
+  renderSection(gen3, 'gen3Grid', 'gen3Count', { female: 'Great-Granddaughter', male: 'Great-Grandson', neutral: 'Great-Grandchild' });
+
+  document.getElementById('offspringWrapper').style.display = 'block';
+}
+
+function getDescendantsTree(parentRecord, currentGen, maxGen) {
+  const node = { data: parentRecord, children: [] };
+  
+  if (currentGen < maxGen) {
+    const directChildren = findDirectChildren([parentRecord]);
+    node.children = directChildren.map(child => getDescendantsTree(child, currentGen + 1, maxGen));
+  }
+  
+  return node;
+}
+
+function viewBasicFamily() {
+  const input = document.getElementById('cowInput').value;
+  const rootId = resolveId(input);
+  if (!rootId) {
+    alert(`No matching animal found for "${input}".`);
+    return;
+  }
+
+  hideAllViews();
+  dropdown.style.display = 'none';
+
+  const maxGen = parseInt(document.getElementById('genSelect').value, 10);
+  const rootRecord = herdDB[rootId];
+  
+  const treeRoot = getDescendantsTree(rootRecord, 1, maxGen);
+
+  const metaContainer = document.getElementById('familyMeta');
+  metaContainer.innerHTML = `
+    <strong>FORWARD PEDIGREE OF:</strong> ${rootRecord?.name || rootId}<br>
+    <strong>Birth ID:</strong> ${rootId}<br>
+    <strong>Sex:</strong> ${rootRecord?.sex || 'N/A'}<br>
+    <strong>Date of Birth:</strong> ${rootRecord?.dob || 'N/A'}
+  `;
+
+  let treeOutput = "";
+
+  function formatLabel(record) {
+    if (!record) return 'Unrecorded';
+    const name = record.name || '';
+    const num = record.cowNum || record.birthId || '';
+    
+    if (name && num && name !== num) return `${name} ${num}`;
+    return name || num || 'Unrecorded';
+  }
+
+  function printForwardTree(node, level = 0) {
+    const label = formatLabel(node.data);
+
+    if (level === 0) {
+      treeOutput += `+--${label}\n`;
+    } else {
+      let prefix = "";
+      for (let i = 0; i < level; i++) {
+        prefix += "| ";
+      }
+      prefix += "+--";
+      treeOutput += `${prefix}${label}\n`;
+    }
+
+    if (node.children && node.children.length > 0) {
+      node.children.forEach(childNode => printForwardTree(childNode, level + 1));
+    }
+  }
+
+  printForwardTree(treeRoot, 0);
+
+  document.getElementById('familyTreeText').textContent = treeOutput || "No descendant lineage data found.";
+  document.getElementById('familyTextWrapper').style.display = 'block';
+}
+
+function hideAllViews() {
+  document.getElementById('treeWrapper').style.display = 'none';
+  document.getElementById('offspringWrapper').style.display = 'none';
+  document.getElementById('familyTextWrapper').style.display = 'none';
+}
+
+// Fetch herd data on boot
+loadHerdData();
+</script>
+</body>
+</html>
