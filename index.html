@@ -218,8 +218,8 @@
 <body>
 
   <!-- Floating Photo Preview Modal -->
-  <div id="photoPreviewWrapper" onclick="hideGlobalPreview()">
-    <span class="photo-close-btn">&times;</span>
+  <div id="photoPreviewWrapper" onclick="hideGlobalPreview(event)">
+    <span class="photo-close-btn" onclick="hideGlobalPreview(event)" ontouchend="hideGlobalPreview(event)">&times;</span>
     <img id="globalPhotoPreview" alt="Enlarged Animal Photo" />
   </div>
 
@@ -472,7 +472,7 @@ document.addEventListener('click', (e) => {
   const wrapper = document.getElementById('photoPreviewWrapper');
   if (wrapper && wrapper.style.display === 'block') {
     if (!e.target.closest('.has-photo') && !e.target.closest('#photoPreviewWrapper')) {
-      hideGlobalPreview();
+      hideGlobalPreview(e);
     }
   }
 });
@@ -603,11 +603,16 @@ function moveGlobalPreview(e) {
   }
 }
 
-function hideGlobalPreview() {
+function hideGlobalPreview(e) {
+  if (e) {
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
+  }
+  
   const wrapper = document.getElementById('photoPreviewWrapper');
   const preview = document.getElementById('globalPhotoPreview');
-  wrapper.style.display = 'none';
-  preview.src = '';
+  if (wrapper) wrapper.style.display = 'none';
+  if (preview) preview.src = '';
 }
 
 function renderCard(node, isSubject = false, isOffspringView = false) {
@@ -639,7 +644,7 @@ function renderCard(node, isSubject = false, isOffspringView = false) {
   const isClickable = !!resolvedTarget;
 
   const hoverHandlers = hasRealPhoto 
-    ? `onmouseenter="showGlobalPreview(event, '${photoUrl}')" onmousemove="moveGlobalPreview(event)" onmouseleave="hideGlobalPreview()"` 
+    ? `onmouseenter="showGlobalPreview(event, '${photoUrl}')" onmousemove="moveGlobalPreview(event)" onmouseleave="hideGlobalPreview(event)"` 
     : '';
 
   return `
