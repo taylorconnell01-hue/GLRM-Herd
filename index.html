@@ -80,6 +80,7 @@
     border-radius: 12px;
     background: #000;
     padding: 4px;
+    pointer-events: none;
   }
 
   #globalPhotoPreview {
@@ -90,7 +91,9 @@
     display: block;
   }
 
+  /* Show close button only on mobile/touch screens */
   .photo-close-btn {
+    display: none;
     position: absolute;
     top: -12px;
     right: -12px;
@@ -102,12 +105,17 @@
     height: 32px;
     font-size: 16px;
     font-weight: bold;
-    display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     touch-action: manipulation;
+    pointer-events: auto;
+  }
+
+  @media (max-width: 768px) {
+    #photoPreviewWrapper { pointer-events: auto; }
+    .photo-close-btn { display: flex; }
   }
 
   /* Tree View & Zoom Controls */
@@ -199,17 +207,17 @@
   }
   
   /* Interactive Links inside Text View */
-  .family-tree-text a.tree-link {
+  .family-tree-text span.tree-link {
     color: #0066cc; font-weight: bold; text-decoration: underline; cursor: pointer;
   }
-  .family-tree-text a.tree-link:hover {
+  .family-tree-text span.tree-link:hover {
     color: #004499; background: #e8f3ff;
   }
 </style>
 </head>
 <body>
 
-  <!-- Floating Photo Preview Modal with Close Button -->
+  <!-- Floating Photo Preview Modal -->
   <div id="photoPreviewWrapper" onclick="hideGlobalPreview()">
     <span class="photo-close-btn">&times;</span>
     <img id="globalPhotoPreview" alt="Enlarged Animal Photo" />
@@ -426,9 +434,9 @@ searchInput.addEventListener('input', (e) => {
   }
 
   dropdown.innerHTML = results.map(item => {
-    const title = item.name || (item.cowNum ? `Cow #${item.cowNum}` : item.birthId);
+    const title = item.name || (item.cowNum ? `#${item.cowNum}` : item.birthId);
     const sub = [
-      item.cowNum ? `Cow #${item.cowNum}` : '',
+      item.cowNum ? `#${item.cowNum}` : '',
       `ID: ${item.birthId}`
     ].filter(Boolean).join(' • ');
 
@@ -450,7 +458,7 @@ function selectSuggestion(birthId) {
   const item = herdDB[birthId];
   if (!item) return;
 
-  const displayName = item.name || (item.cowNum ? `Cow #${item.cowNum}` : item.birthId);
+  const displayName = item.name || (item.cowNum ? `#${item.cowNum}` : item.birthId);
   searchInput.value = displayName;
   selectedBirthId = birthId;
   dropdown.style.display = 'none';
@@ -461,7 +469,6 @@ document.addEventListener('click', (e) => {
     dropdown.style.display = 'none';
   }
   
-  // Close floating photo if user clicks anywhere outside an active image
   const wrapper = document.getElementById('photoPreviewWrapper');
   if (wrapper && wrapper.style.display === 'block') {
     if (!e.target.closest('.has-photo') && !e.target.closest('#photoPreviewWrapper')) {
@@ -551,8 +558,6 @@ function flattenTreeByGen(node, genMap = {}) {
 }
 
 function showGlobalPreview(e, url) {
-  if (e && e.stopPropagation) e.stopPropagation();
-
   const wrapper = document.getElementById('photoPreviewWrapper');
   const preview = document.getElementById('globalPhotoPreview');
   preview.src = url;
@@ -563,10 +568,14 @@ function showGlobalPreview(e, url) {
     wrapper.style.transform = 'translate(-50%, -50%)';
   } else {
     let x = e.clientX + 15;
-    let y = e.clientY;
-    if (x + 240 > window.innerWidth) x = e.clientX - 250;
-    if (y + 130 > window.innerHeight) y = window.innerHeight - 130;
+    let y = e.clientY + 15;
+
+    if (x + 280 > window.innerWidth) x = e.clientX - 280;
+    if (y + 280 > window.innerHeight) y = window.innerHeight - 280;
     
+    if (y < 10) y = 10;
+    if (x < 10) x = 10;
+
     wrapper.style.left = `${x}px`;
     wrapper.style.top = `${y}px`;
     wrapper.style.transform = 'none';
@@ -580,9 +589,13 @@ function moveGlobalPreview(e) {
     const wrapper = document.getElementById('photoPreviewWrapper');
     if (wrapper.style.display === 'block') {
       let x = e.clientX + 15;
-      let y = e.clientY;
-      if (x + 240 > window.innerWidth) x = e.clientX - 250;
-      if (y + 130 > window.innerHeight) y = window.innerHeight - 130;
+      let y = e.clientY + 15;
+
+      if (x + 280 > window.innerWidth) x = e.clientX - 280;
+      if (y + 280 > window.innerHeight) y = window.innerHeight - 280;
+
+      if (y < 10) y = 10;
+      if (x < 10) x = 10;
 
       wrapper.style.left = `${x}px`;
       wrapper.style.top = `${y}px`;
@@ -611,10 +624,10 @@ function renderCard(node, isSubject = false, isOffspringView = false) {
       </div>`;
   }
 
-  const displayName = data?.name || node.fallbackName || (data?.cowNum ? `Cow #${data.cowNum}` : (node.id || node.fallbackCode || 'Unrecorded'));
+  const displayName = data?.name || node.fallbackName || (data?.cowNum ? `#${data.cowNum}` : (node.id || node.fallbackCode || 'Unrecorded'));
   const sireOfThisAnimal = (data && data.hasFullRecord) ? (data.sireName || data.sireCode || '') : '';
   
-  const cowNumDisplay = data?.cowNum ? `Cow #${data.cowNum}` : '';
+  const cowNumDisplay = data?.cowNum ? `#${data.cowNum}` : '';
   const birthIdDisplay = data?.birthId || (!data && node.id && node.id !== displayName ? node.id : '');
   const photoUrl = data?.photo || PLACEHOLDER_SVG;
   const hasRealPhoto = Boolean(data?.hasRealPhoto);
@@ -631,7 +644,7 @@ function renderCard(node, isSubject = false, isOffspringView = false) {
 
   return `
     <div class="card ${isSubject ? 'active-subject' : ''} ${!isClickable ? 'static-card' : ''}" 
-         onclick="${isClickable ? `focusAnimal('${resolvedTarget}')` : ''}" 
+         ${isClickable ? `onclick="focusAnimal('${resolvedTarget}')"` : ''} 
          title="${isClickable ? `Click to focus on ${displayName}` : displayName}">
       
       <div class="img-container ${hasRealPhoto ? 'has-photo' : ''}" ${hoverHandlers}>
@@ -664,6 +677,7 @@ function renderCard(node, isSubject = false, isOffspringView = false) {
 
 function buildTree(rootId) {
   hideAllViews();
+  hideGlobalPreview();
   const maxGen = parseInt(document.getElementById('genSelect').value, 10);
   const rootRecord = herdDB[rootId];
   const treeRoot = getAncestors(rootId, rootRecord?.name || '', rootRecord?.sireCode || '', 1, maxGen, 'Focus Animal');
@@ -729,12 +743,18 @@ function lookupAndBuild() {
 }
 
 function focusAnimal(id) {
-  const resolved = resolveId(id);
-  if (resolved) {
-    const item = herdDB[resolved];
-    searchInput.value = item?.name || (item?.cowNum ? `Cow #${item.cowNum}` : resolved);
-    selectedBirthId = resolved;
-    buildTree(resolved);
+  let targetId = id;
+  if (!herdDB[targetId]) {
+    targetId = resolveId(id) || resolveSireId(id) || resolveDamId(id);
+  }
+  
+  if (targetId && herdDB[targetId]) {
+    const item = herdDB[targetId];
+    searchInput.value = item?.name || (item?.cowNum ? `#${item.cowNum}` : targetId);
+    selectedBirthId = targetId;
+    buildTree(targetId);
+  } else {
+    alert(`Could not find full record to set as focus animal for ID: ${id}`);
   }
 }
 
@@ -771,9 +791,10 @@ function lookupDescendants() {
   }
 
   hideAllViews();
+  hideGlobalPreview();
   dropdown.style.display = 'none';
   const root = herdDB[rootId];
-  const titleName = root?.name || (root?.cowNum ? `Cow #${root.cowNum}` : rootId);
+  const titleName = root?.name || (root?.cowNum ? `#${root.cowNum}` : rootId);
 
   const gen1 = findDirectChildren([root]);
   const gen2 = gen1.length > 0 ? findDirectChildren(gen1) : [];
@@ -825,6 +846,7 @@ function viewBasicFamily() {
   }
 
   hideAllViews();
+  hideGlobalPreview();
   dropdown.style.display = 'none';
 
   const maxGen = parseInt(document.getElementById('genSelect').value, 10);
@@ -834,7 +856,7 @@ function viewBasicFamily() {
 
   const metaContainer = document.getElementById('familyMeta');
   metaContainer.innerHTML = `
-    <strong>FORWARD PEDIGREE OF:</strong> ${rootRecord?.name || rootId}<br>
+    <strong>FORWARD PEDIGREE OF:</strong> ${rootRecord?.name || (rootRecord?.cowNum ? '#' + rootRecord.cowNum : rootId)}<br>
     <strong>Birth ID:</strong> ${rootId}<br>
     <strong>Sex:</strong> ${rootRecord?.sex || 'N/A'}<br>
     <strong>Date of Birth:</strong> ${rootRecord?.dob || 'N/A'}
@@ -845,16 +867,18 @@ function viewBasicFamily() {
   function formatLabelHtml(record) {
     if (!record) return 'Unrecorded';
     const name = record.name || '';
-    const num = record.cowNum ? `Cow #${record.cowNum}` : '';
-    const id = record.birthId || '';
+    const num = record.cowNum ? `#${record.cowNum}` : '';
 
-    const label = [name, num, id ? `(${id})` : ''].filter(Boolean).join(' ');
+    const parts = [];
+    if (name) parts.push(name);
+    if (num) parts.push(num);
+
+    const label = parts.length > 0 ? parts.join(' ') : (record.birthId || 'Unrecorded');
     
-    // Render clickable HTML anchor if record exists in database
     if (record.birthId) {
-      return `<a class="tree-link" onclick="focusAnimal('${record.birthId}')" title="Click to focus on ${label}">${label}</a>`;
+      return `<span class="tree-link" onclick="focusAnimal('${record.birthId}')" title="Click to view pedigree for ${label}">${label}</span>`;
     }
-    return label || 'Unrecorded';
+    return label;
   }
 
   function printForwardTreeHtml(node, level = 0) {
