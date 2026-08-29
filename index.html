@@ -217,9 +217,8 @@
 </head>
 <body>
 
-  <!-- Floating Photo Preview Modal -->
   <div id="photoPreviewWrapper" onclick="hideGlobalPreview(event)">
-    <span class="photo-close-btn" onclick="hideGlobalPreview(event)" ontouchend="hideGlobalPreview(event)">&times;</span>
+    <span class="photo-close-btn" onclick="hideGlobalPreview(event)" ontouchend="hideGlobalPreview(event)">×</span>
     <img id="globalPhotoPreview" alt="Enlarged Animal Photo" />
   </div>
 
@@ -256,7 +255,6 @@
     </div>
   </div>
 
-  <!-- Pedigree View -->
   <div class="tree-wrapper" id="treeWrapper">
     <div class="zoom-toolbar">
       <span class="zoom-label">Scale:</span>
@@ -270,13 +268,11 @@
     </div>
   </div>
 
-  <!-- Forward Text Family View -->
   <div class="family-text-wrapper" id="familyTextWrapper">
     <div class="family-meta" id="familyMeta"></div>
     <div class="family-tree-text" id="familyTreeText"></div>
   </div>
 
-  <!-- Multi-Generation Descendants View -->
   <div class="offspring-wrapper" id="offspringWrapper">
     <div class="descendant-header">
       <h3 id="offspringMainTitle" style="color:#0969da; font-size: 1.1rem;">Descendant Lineage</h3>
@@ -339,7 +335,9 @@ async function loadHerdData() {
   statusEl.style.color = "#666";
 
   try {
-    const response = await fetch(APPS_SCRIPT_URL, {
+    // Cache-buster parameter forces mobile browsers to perform a fresh fetch on load
+    const cacheBusterUrl = `${APPS_SCRIPT_URL}?t=${Date.now()}`;
+    const response = await fetch(cacheBusterUrl, {
       method: "GET",
       redirect: "follow"
     });
@@ -917,8 +915,10 @@ function hideAllViews() {
   document.getElementById('familyTextWrapper').style.display = 'none';
 }
 
-// Fetch herd data on boot
-loadHerdData();
+// Fetch herd data immediately upon DOMContentLoaded for fastest performance on mobile
+document.addEventListener('DOMContentLoaded', () => {
+  loadHerdData();
+});
 </script>
 </body>
 </html>
