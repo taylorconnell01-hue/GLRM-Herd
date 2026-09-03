@@ -80,7 +80,7 @@
     border-radius: 12px;
     background: #000;
     padding: 4px;
-    pointer-events: none;
+    pointer-events: auto;
   }
 
   #globalPhotoPreview {
@@ -91,7 +91,6 @@
     display: block;
   }
 
-  /* Show close button only on mobile/touch screens */
   .photo-close-btn {
     display: none;
     position: absolute;
@@ -114,7 +113,6 @@
   }
 
   @media (max-width: 768px) {
-    #photoPreviewWrapper { pointer-events: auto; }
     .photo-close-btn { display: flex; }
   }
 
@@ -206,7 +204,6 @@
     overflow-x: auto; color: #24292f; -webkit-overflow-scrolling: touch;
   }
   
-  /* Interactive Links inside Text View */
   .family-tree-text span.tree-link {
     color: #0066cc; font-weight: bold; text-decoration: underline; cursor: pointer;
   }
@@ -308,9 +305,11 @@ function formatImageUrl(url) {
   if (!url || typeof url !== 'string' || !url.trim()) return '';
   const raw = url.trim();
 
+  // Convert Google Drive /d/ FILE_ID links to direct image preview URLs
   const matchD = raw.match(/\/d\/([a-zA-Z0-9_-]+)/);
   if (matchD && matchD[1]) return `https://lh3.googleusercontent.com/d/${matchD[1]}`;
 
+  // Convert Google Drive ?id= FILE_ID links to direct image preview URLs
   const matchId = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (matchId && matchId[1]) return `https://lh3.googleusercontent.com/d/${matchId[1]}`;
 
@@ -335,7 +334,6 @@ async function loadHerdData() {
   statusEl.style.color = "#666";
 
   try {
-    // Cache-buster parameter forces mobile browsers to perform a fresh fetch on load
     const cacheBusterUrl = `${APPS_SCRIPT_URL}?t=${Date.now()}`;
     const response = await fetch(cacheBusterUrl, {
       method: "GET",
@@ -462,6 +460,10 @@ function selectSuggestion(birthId) {
   dropdown.style.display = 'none';
 }
 
+function isTouchDevice() {
+  return window.innerWidth <= 768 || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+}
+
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.search-wrapper')) {
     dropdown.style.display = 'none';
@@ -555,16 +557,40 @@ function flattenTreeByGen(node, genMap = {}) {
   return genMap;
 }
 
+function handleMouseEnter(e, url) {
+  if (!isTouchDevice()) {
+    showGlobalPreview(e, url);
+  }
+}
+
+function toggleMobilePreview(e, url) {
+  if (!url) return;
+  if (e) {
+    e.stopPropagation();
+    if (e.preventDefault) e.preventDefault();
+  }
+
+  const wrapper = document.getElementById('photoPreviewWrapper');
+  const preview = document.getElementById('globalPhotoPreview');
+  
+  if (wrapper.style.display === 'block' && preview.src === url) {
+    hideGlobalPreview(e);
+  } else {
+    showGlobalPreview(e, url);
+  }
+}
+
 function showGlobalPreview(e, url) {
+  if (!url) return;
   const wrapper = document.getElementById('photoPreviewWrapper');
   const preview = document.getElementById('globalPhotoPreview');
   preview.src = url;
 
-  if (window.innerWidth <= 768) {
+  if (isTouchDevice()) {
     wrapper.style.left = '50%';
     wrapper.style.top = '50%';
     wrapper.style.transform = 'translate(-50%, -50%)';
-  } else {
+  } else if (e) {
     let x = e.clientX + 15;
     let y = e.clientY + 15;
 
@@ -583,7 +609,7 @@ function showGlobalPreview(e, url) {
 }
 
 function moveGlobalPreview(e) {
-  if (window.innerWidth > 768) {
+  if (!isTouchDevice()) {
     const wrapper = document.getElementById('photoPreviewWrapper');
     if (wrapper.style.display === 'block') {
       let x = e.clientX + 15;
@@ -642,7 +668,11 @@ function renderCard(node, isSubject = false, isOffspringView = false) {
   const isClickable = !!resolvedTarget;
 
   const hoverHandlers = hasRealPhoto 
-    ? `onmouseenter="showGlobalPreview(event, '${photoUrl}')" onmousemove="moveGlobalPreview(event)" onmouseleave="hideGlobalPreview(event)"` 
+    ? `onmouseenter="handleMouseEnter(event, '${photoUrl}')" 
+       onmousemove="moveGlobalPreview(event)" 
+       onmouseleave="hideGlobalPreview(event)" 
+       onclick="toggleMobilePreview(event, '${photoUrl}')" 
+       ontouchstart="event.stopPropagation();"` 
     : '';
 
   return `
@@ -679,8 +709,8 @@ function renderCard(node, isSubject = false, isOffspringView = false) {
 }
 
 function buildTree(rootId) {
-  hideAllViews();
   hideGlobalPreview();
+  hideAllViews();
   const maxGen = parseInt(document.getElementById('genSelect').value, 10);
   const rootRecord = herdDB[rootId];
   const treeRoot = getAncestors(rootId, rootRecord?.name || '', rootRecord?.sireCode || '', 1, maxGen, 'Focus Animal');
@@ -915,7 +945,6 @@ function hideAllViews() {
   document.getElementById('familyTextWrapper').style.display = 'none';
 }
 
-// Fetch herd data immediately upon DOMContentLoaded for fastest performance on mobile
 document.addEventListener('DOMContentLoaded', () => {
   loadHerdData();
 });
